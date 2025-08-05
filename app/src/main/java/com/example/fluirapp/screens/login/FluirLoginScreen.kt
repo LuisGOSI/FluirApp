@@ -412,7 +412,7 @@ fun InputField(
 }
 
 // Función para dibujar efectos de agua de fondo (igual que en SplashScreen)
-private fun DrawScope.drawWaterEffects(waveOffset: Float, dropAnimation: Float) {
+fun DrawScope.drawWaterEffects(waveOffset: Float, dropAnimation: Float) {
     val width = size.width
     val height = size.height
 

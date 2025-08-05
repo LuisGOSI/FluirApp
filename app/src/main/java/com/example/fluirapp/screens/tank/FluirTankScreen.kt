@@ -29,6 +29,8 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -44,37 +46,76 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
+import com.example.fluirapp.mqtt.MqttClientManager
 
 @Composable
 fun TankDetailScreen(
     navController: NavController,
     tankId: String
 ) {
-    // Simular datos del tanque basados en el ID - reemplaza con datos reales de MQTT
-    val tankData = remember {
-        when (tankId) {
-            "tank_1" -> TankDetailData(
-                name = "El Dorado",
-                fillLevel = 80f,
-                capacity = "1000 L",
-                pumpPower = "50kW",
-                status = "Normal",
-                operationMode = "Automático",
-                isOperating = true
-            )
-            else -> TankDetailData(
-                name = "Manzanares",
-                fillLevel = 90f,
-                capacity = "1000 L",
-                pumpPower = "30kW",
-                status = "Óptimo",
-                operationMode = "Automático",
-                isOperating = true
-            )
-        }
+
+    val tank1FillLevel by MqttClientManager.tank1DataFlow.collectAsState()
+    val tank2FillLevel by MqttClientManager.tank2DataFlow.collectAsState()
+    val flow1Level by MqttClientManager.colony1Flow.collectAsState()
+    val flow2Level by MqttClientManager.colony2Flow.collectAsState()
+
+    // Datos del tanque según el ID
+    val tankData = remember(tankId) {
+        mutableStateOf(
+            when (tankId) {
+                "tank_1" -> TankDetailData(
+                    name = "El Dorado",
+                    fillLevel = 0f,
+                    capacity = "600,000 L",
+                    pumpPower = "40kW",
+                    status = "Apagado",
+                    flow = 0f,
+                    operationMode = "Automático",
+                    isOperating = true
+                )
+                else -> TankDetailData(
+                    name = "Manzanares",
+                    fillLevel = 0f,
+                    capacity = "350A,000 L",
+                    pumpPower = "30kW",
+                    status = "Apagado",
+                    flow = 0f,
+                    operationMode = "Automático",
+                    isOperating = true
+                )
+            }
+        )
     }
 
-    var isOperating by remember{ mutableStateOf(tankData.isOperating) }
+    LaunchedEffect(Unit) {
+        MqttClientManager.connect()
+        MqttClientManager.subscribeToTank1("fluir/tanque/1")
+        MqttClientManager.subscribeToTank2("fluir/tanque/2")
+        MqttClientManager.subscribeToFlow1("fluir/caudal/1")
+        MqttClientManager.subscribeToFlow2("fluir/caudal/2")
+    }
+
+    LaunchedEffect(tank1FillLevel, tank2FillLevel, flow1Level, flow2Level) {
+        val currentFillLevel = when (tankId) {
+            "tank_1" -> tank1FillLevel ?: 0f
+            else -> tank2FillLevel ?: 0f
+        }
+
+        val currentFlow = when (tankId) {
+            "tank_1" -> flow1Level ?: 0f
+            else -> flow2Level ?: 0f
+        }
+
+        tankData.value = tankData.value.copy(
+            fillLevel = currentFillLevel,
+            isOperating = currentFillLevel > 0f,
+            flow = currentFlow,
+            status = if (currentFillLevel > 0f) "En operación" else "Apagado"
+        )
+    }
+
+    val currentTankData by tankData
+    var isOperating by remember{ mutableStateOf(currentTankData.isOperating) }
 
     Box(
         modifier = Modifier
@@ -113,7 +154,7 @@ fun TankDetailScreen(
                 Spacer(modifier = Modifier.width(8.dp))
 
                 Text(
-                    text = tankData.name,
+                    text = tankData.value.name,
                     style = MaterialTheme.typography.headlineMedium.copy(
                         color = Color(0xFF1976D2),
                         fontWeight = FontWeight.Bold
@@ -142,7 +183,7 @@ fun TankDetailScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     LargeTankIllustration(
-                        fillLevel = tankData.fillLevel,
+                        fillLevel = tankData.value.fillLevel,
                         modifier = Modifier.size(150.dp)
                     )
                 }
@@ -210,11 +251,12 @@ fun TankDetailScreen(
                     modifier = Modifier.padding(20.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    DetailRow("Nivel de llenado:", "${tankData.fillLevel.toInt()}%")
-                    DetailRow("Contenido en litros:", tankData.capacity)
-                    DetailRow("Potencia de la bomba:", tankData.pumpPower)
-                    DetailRow("Estado:", tankData.status)
-                    DetailRow("Modo de operación:", tankData.operationMode)
+                    DetailRow("Nivel de llenado:", "${tankData.value.fillLevel.toInt()}%")
+                    DetailRow("Contenido en litros:", tankData.value.capacity)
+                    DetailRow("Potencia de la bomba:", tankData.value.pumpPower)
+                    DetailRow("Estado:", tankData.value.status)
+                    DetailRow("Modo de operación:", tankData.value.operationMode)
+                    DetailRow("Caudal de colonia :", "${tankData.value.flow.toInt()} L/s")
                 }
             }
         }
@@ -326,10 +368,12 @@ fun LargeTankIllustration(
 
 data class TankDetailData(
     val name: String,
-    val fillLevel: Float,
+    var fillLevel: Float,
     val capacity: String,
     val pumpPower: String,
-    val status: String,
+    var status: String,
+    var flow: Float,
     val operationMode: String,
-    val isOperating: Boolean
+    var isOperating: Boolean
 )
+

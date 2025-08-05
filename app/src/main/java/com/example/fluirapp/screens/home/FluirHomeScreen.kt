@@ -31,6 +31,8 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
+import com.example.fluirapp.mqtt.MqttClientManager
+import com.example.fluirapp.screens.settings.drawWaterEffects
 import kotlinx.coroutines.delay
 import kotlin.math.PI
 import kotlin.math.sin
@@ -49,16 +51,38 @@ data class TankData(
 @RequiresApi(Build.VERSION_CODES.VANILLA_ICE_CREAM)
 @Composable
 fun FluirHomeScreen(navController: NavController, viewModel: HomeViewModel = viewModel()) {
-    // Estados simulados para los sensores MQTT - aquí conectarías con tu ViewModel real
+    val waveOffset by rememberInfiniteTransition().animateFloat(
+        initialValue = 0f,
+        targetValue = 2 * PI.toFloat(),
+        animationSpec = infiniteRepeatable(
+            animation = tween(4000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        )
+    )
+
+    val dropAnimation by rememberInfiniteTransition().animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(6000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        )
+    )
+
+    val tank1FillLevel by MqttClientManager.tank1DataFlow.collectAsState()
+    val tank2FillLevel by MqttClientManager.tank2DataFlow.collectAsState()
+
+
+    // Estados simulados para los sensores MQTT
     var tank1Data by remember {
         mutableStateOf(
             TankData(
                 id = "tank_1",
                 name = "El Dorado",
-                fillLevel = 80f,
-                pumpPower = "Alta",
-                status = "Normal",
-                isOperating = true
+                fillLevel = 0f,
+                pumpPower = "Apagada",
+                status = "Requiere inspección",
+                isOperating = false
             )
         )
     }
@@ -68,20 +92,58 @@ fun FluirHomeScreen(navController: NavController, viewModel: HomeViewModel = vie
             TankData(
                 id = "tank_2",
                 name = "Manzanares",
-                fillLevel = 90f,
-                pumpPower = "Alta",
-                status = "Óptimo",
-                isOperating = true
+                fillLevel = 0f,
+                pumpPower = "Apagada",
+                status = "Requiere inspección",
+                isOperating = false
             )
         )
     }
 
-    // Aquí simulo la actualización de datos MQTT - reemplaza con tu lógica real
+    // Conectar al cliente MQTT y suscribirse a los tópicos de los tanques
     LaunchedEffect(Unit) {
-        // Ejemplo de cómo podrías actualizar los datos desde MQTT
-        // viewModel.subscribeToMqttTopic("sensor/tank1") { data ->
-        //     tank1Data = tank1Data.copy(fillLevel = data.level, status = data.status)
-        // }
+        MqttClientManager.connect()
+        MqttClientManager.subscribeToTank1("fluir/tanque/1")
+        MqttClientManager.subscribeToTank2("fluir/tanque/2")
+
+    }
+
+    LaunchedEffect(tank1FillLevel)
+    {
+        tank1FillLevel?.let { level ->
+            val validLevel = level.coerceIn(0f, 100f)
+            tank1Data = tank1Data.copy(fillLevel = validLevel)
+
+            val newStatus = when {
+                validLevel > 75 -> "Óptimo"
+                validLevel > 50 -> "Normal"
+                else -> "Requiere atención"
+            }
+
+            val newPumpPower = when {
+                validLevel > 75 -> "Baja"
+                validLevel > 50 -> "Media"
+                else -> "Alta"
+            }
+
+            tank1Data = tank1Data.copy(pumpPower = newPumpPower)
+            tank1Data = tank1Data.copy(status = newStatus)
+        }
+    }
+
+    LaunchedEffect(tank2FillLevel)
+    {
+        tank2FillLevel?.let { level ->
+            val validLevel = level.coerceIn(0f, 100f)
+            tank2Data = tank2Data.copy(fillLevel = validLevel)
+
+            val newStatus = when {
+                validLevel > 75 -> "Óptimo"
+                validLevel > 50 -> "Normal"
+                else -> "Requiere inspección"
+            }
+            tank2Data = tank2Data.copy(status = newStatus)
+        }
     }
 
     Box(
@@ -96,6 +158,12 @@ fun FluirHomeScreen(navController: NavController, viewModel: HomeViewModel = vie
                 )
             )
     ) {
+        Canvas(
+            modifier = Modifier.fillMaxSize()
+        ) {
+            drawWaterEffects(waveOffset, dropAnimation)
+        }
+
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
@@ -367,5 +435,46 @@ fun TankIllustration(
                 strokeWidth = 1.dp.toPx()
             )
         }
+    }
+}
+
+private fun DrawScope.drawWaterEffects(waveOffset: Float, dropAnimation: Float) {
+    val width = size.width
+    val height = size.height
+
+    // Ondas de fondo más sutiles
+    for (i in 0..2) {
+        val amplitude = 15f + i * 8f
+        val frequency = 0.006f + i * 0.003f
+        val yPos = height * 0.85f + i * 25f
+        val alpha = 0.04f - i * 0.008f
+
+        val path = Path()
+        path.moveTo(0f, yPos)
+
+        for (x in 0..width.toInt() step 8) {
+            val y = yPos + amplitude * sin(x * frequency + waveOffset + i * PI.toFloat() / 4)
+            path.lineTo(x.toFloat(), y)
+        }
+
+        path.lineTo(width, height)
+        path.lineTo(0f, height)
+        path.close()
+
+        drawPath(path, Color(0xFF367BBC).copy(alpha = alpha))
+    }
+
+    // Efectos de gotas (opcional)
+    val dropCount = 3
+    for (i in 0 until dropCount) {
+        val x = width * (0.2f + i * 0.3f)
+        val baseY = height * 0.3f
+        val dropY = baseY + (height * 0.4f * ((dropAnimation + i * 0.3f) % 1f))
+
+        drawCircle(
+            color = Color(0xFF367BBC).copy(alpha = 0.1f),
+            radius = 4.dp.toPx(),
+            center = Offset(x, dropY)
+        )
     }
 }

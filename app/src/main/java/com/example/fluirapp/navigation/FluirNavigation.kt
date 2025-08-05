@@ -36,6 +36,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -43,8 +44,13 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.example.fluirapp.R
 import com.example.fluirapp.screens.FluirSplashScreen
+import com.example.fluirapp.screens.history.FluirHistoryScreen
 import com.example.fluirapp.screens.home.FluirHomeScreen
 import com.example.fluirapp.screens.login.FluirLoginScreen
+import com.example.fluirapp.screens.pumps.ThresholdSettingsScreen
+import com.example.fluirapp.screens.settings.FluirSettingsScreen
+import com.example.fluirapp.screens.settings.SettingsScreenViewModel
+import com.example.fluirapp.screens.stats.FluirStatsScreen
 import com.example.fluirapp.screens.tank.TankDetailScreen
 
 @RequiresApi(Build.VERSION_CODES.VANILLA_ICE_CREAM)
@@ -81,20 +87,32 @@ fun FluirNavigation(){
                 FluirHomeScreen(navController = navController)
             }
             composable(FluirScreens.StatsScreen.name) {
-                // Aquí puedes agregar la pantalla de estadísticas
-                Text(text = "Estadísticas", modifier = Modifier.padding(16.dp))
+                FluirStatsScreen(navController = navController)
             }
             composable(FluirScreens.HistoryScreen.name) {
-                // Aquí puedes agregar la pantalla de historial
-                Text(text = "Historial", modifier = Modifier.padding(16.dp))
+                FluirHistoryScreen(navController = navController)
             }
             composable(FluirScreens.SettingsScreen.name) {
-                // Aquí puedes agregar la pantalla de configuración
-                Text(text = "Configuración", modifier = Modifier.padding(16.dp))
+                val settingsViewModel: SettingsScreenViewModel = viewModel()
+                FluirSettingsScreen(
+                    navController = navController,
+                    viewModel = settingsViewModel,
+                    onSignOut = {
+                        navController.navigate(FluirScreens.LoginScreen.name) {
+                            popUpTo(0) {
+                                inclusive = true
+                            }
+                            launchSingleTop = true
+                        }
+                    }
+                )
             }
             composable("tank_detail/{tankId}") { backStackEntry ->
                 val tankId = backStackEntry.arguments?.getString("tankId") ?: ""
                 TankDetailScreen(navController = navController, tankId = tankId)
+            }
+            composable("cofiguration_tanks") {
+                ThresholdSettingsScreen(navController = navController)
             }
         }
     }
