@@ -71,6 +71,7 @@ dependencies {
     implementation("com.google.firebase:firebase-auth:24.0.0")
     implementation("com.google.firebase:firebase-firestore:26.0.0")
 
+
     // Hilt
     implementation("androidx.hilt:hilt-navigation-compose:1.0.0")
 
